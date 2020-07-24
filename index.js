@@ -3,17 +3,21 @@ const config = require('./publisher.config')
 const express = require('express')
 const bodyParser = require('body-parser');
 const simpleGit = require('simple-git');
-const git = simpleGit();
 
 const fs = require('fs');
+const fsExtra = require('fs-extra')
 const path = require('path')
 const IPFS = require('ipfs');
 const fetch = require('node-fetch');
 
-const citiesDir = path.join(__dirname, 'cities');
+const nileClientDir = path.join(__dirname, 'tmp/nile-client-lite');
+
+const nileRepositoryDir = path.join(__dirname, 'tmp/nile-repository');
+const citiesDir = path.join(nileRepositoryDir, 'cities');
+const citiesFile = path.join(nileRepositoryDir, 'cities.json');
 
 const getCities = () => {
-  const buffer = fs.readFileSync(path.join(__dirname, 'cities.json'));
+  const buffer = fs.readFileSync(citiesFile);
   return JSON.parse(buffer.toString('utf-8'));
 };
 
@@ -23,6 +27,16 @@ const getStores = (cityUid) => {
 };
 
 const publishRepository = async () => {
+
+  let succeeding = true;
+
+  try {
+    await simpleGit().clone('git@github.com:nileorg/nile-repository.git', './tmp/nile-repository')
+  } catch(error) {
+    console.error(error);
+    succeeding = false;
+  }
+
   const ipfsNode = await IPFS.create();
 
   const addToIpfs = async (filename) => {
@@ -45,8 +59,6 @@ const publishRepository = async () => {
     return { ...store, link };
   };
 
-  let succeeding = true;
-
   try {
     const citiesWithLinksPromises = getCities().map(async (city) => {
       const { uid: cityUid } = city;
@@ -55,22 +67,29 @@ const publishRepository = async () => {
       const storesWithLinksJson = JSON.stringify(storesWithLinks);
       fs.writeFileSync(path.join(citiesDir, cityUid, 'stores.json'), storesWithLinksJson);
 
-      const link = await addToIpfs(path.join(__dirname, 'cities', cityUid, 'stores.json'));
+      const link = await addToIpfs(path.join(citiesDir, cityUid, 'stores.json'));
       return { ...city, link };
     });
 
     const citiesWithLinks = await Promise.all(citiesWithLinksPromises);
     const citiesWithLinksJson = JSON.stringify(citiesWithLinks);
-    const citiesFilename = path.join(__dirname, 'cities.json');
+    const citiesFilename = citiesFile;
     fs.writeFileSync(citiesFilename, citiesWithLinksJson);
     const citiesLink = await addToIpfs(citiesFilename);
 
-    // TODO: Publish on git: check https://www.npmjs.com/package/simple-git
+    await simpleGit().clone('git@github.com:nileorg/nile-client-lite.git', nileClientDir)
+    
+    await fsExtra.outputFile(nileClientDir + '/src/hash.js', `export default '${citiesLink}';`)
+    await simpleGit(nileClientDir)
+      .add('./*')
+      .commit("update hash")
+      .push('origin', 'master')
 
   } catch (error) {
     console.error(error);
     succeeding = false;
   } finally {
+    fsExtra.emptyDirSync('./tmp')
     ipfsNode.stop();
     return succeeding;
   }
@@ -86,3 +105,5 @@ app.post('/publish', function (req, res) {
     return res.status(500).send()
   }
 })
+
+app.listen(8000)
