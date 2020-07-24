@@ -28,15 +28,6 @@ const getStores = (cityUid) => {
 
 const publishRepository = async () => {
 
-  let succeeding = true;
-
-  try {
-    await simpleGit().clone('git@github.com:nileorg/nile-repository.git', './tmp/nile-repository')
-  } catch(error) {
-    console.error(error);
-    succeeding = false;
-  }
-
   const ipfsNode = await IPFS.create();
 
   const addToIpfs = async (filename) => {
@@ -59,7 +50,12 @@ const publishRepository = async () => {
     return { ...store, link };
   };
 
+  let succeeding = true
+
   try {
+
+    await simpleGit().clone('git@github.com:nileorg/nile-repository.git', './tmp/nile-repository')
+    
     const citiesWithLinksPromises = getCities().map(async (city) => {
       const { uid: cityUid } = city;
       const storesWithLinksPromises = getStores(cityUid).map(store => addStore(cityUid, store));
@@ -77,13 +73,20 @@ const publishRepository = async () => {
     fs.writeFileSync(citiesFilename, citiesWithLinksJson);
     const citiesLink = await addToIpfs(citiesFilename);
 
+    console.log(`📥 Cloning repo...`)
     await simpleGit().clone('git@github.com:nileorg/nile-client-lite.git', nileClientDir)
-    
+    console.log(`✅ Repo cloned!`)
+    await simpleGit(nileClientDir).checkout(config.branch)
+    console.log(`✅ Repo switched to ${config.branch}!`)
+
     await fsExtra.outputFile(nileClientDir + '/src/hash.js', `export default '${citiesLink}';`)
+    
+    console.log(`📤 Publishing the new hash...`)
     await simpleGit(nileClientDir)
       .add('./*')
       .commit("update hash")
-      .push('origin', 'master')
+      .push('origin', config.branch)
+    console.log(`✅ New hash published!`)
 
   } catch (error) {
     console.error(error);
@@ -98,8 +101,16 @@ const publishRepository = async () => {
 const app = express()
 app.use(bodyParser.json());
 
-app.post('/publish', function (req, res) {
-  if (publishRepository()) {
+app.use(function (req, res, next) {
+  if (req.headers.authorization != config.token) {
+    return res.status(403).send()
+  }
+  next();
+})
+
+app.post('/publish', async function (req, res) {
+  if (await publishRepository()) {
+    console.log(`✅ Success`)
     return res.status(200).send()
   } else {
     return res.status(500).send()
