@@ -26,21 +26,22 @@ const getStores = (cityUid) => {
   return JSON.parse(buffer.toString('utf-8'));
 };
 
+
+let ipfsNode;
+
 const publishRepository = async () => {
 
-  const ipfsNode = await IPFS.create();
+  if (!ipfsNode) {
+    ipfsNode = await IPFS.create()
+  }
 
   const addToIpfs = async (filename) => {
     if (!filename.startsWith(__dirname)) {
       throw new Error(`Invalid path: ${filename} is not in ${__dirname}`);
     }
-    const ipfsPath = filename.slice(__dirname.length);
-    const { cid } = await ipfsNode.add({
-      path: ipfsPath,
-      content: fs.readFileSync(filename),
-    });
+    const { cid } = await ipfsNode.add(fs.readFileSync(filename));
     const link = cid.toString();
-    console.info(`✅ Added ${ipfsPath}: ${link}`);
+    console.info(`✅ Added ${link}`);
     return link;
   };
 
@@ -93,7 +94,6 @@ const publishRepository = async () => {
     succeeding = false;
   } finally {
     fsExtra.emptyDirSync('./tmp')
-    ipfsNode.stop();
     return succeeding;
   }
 }
