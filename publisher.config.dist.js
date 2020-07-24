@@ -1,3 +1,5 @@
 export default {
-    token: ''
+    token: '',
+    branch: 'master',
+    port: 8000
 }
