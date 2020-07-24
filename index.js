@@ -117,4 +117,4 @@ app.post('/publish', async function (req, res) {
   }
 })
 
-app.listen(8000)
+app.listen(config.port)
