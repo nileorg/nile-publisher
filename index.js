@@ -32,7 +32,7 @@ let ipfsNode;
 const publishRepository = async () => {
 
   if (!ipfsNode) {
-    ipfsNode = await IPFS.create()
+    ipfsNode = await IPFS.create({ repo: config.localRepo });
   }
 
   const addToIpfs = async (filename) => {
@@ -56,7 +56,7 @@ const publishRepository = async () => {
   try {
 
     await simpleGit().clone('git@github.com:nileorg/nile-repository.git', './tmp/nile-repository')
-    
+
     const citiesWithLinksPromises = getCities().map(async (city) => {
       const { uid: cityUid } = city;
       const storesWithLinksPromises = getStores(cityUid).map(store => addStore(cityUid, store));
@@ -81,7 +81,7 @@ const publishRepository = async () => {
     console.log(`✅ Repo switched to ${config.branch}!`)
 
     await fsExtra.outputFile(nileClientDir + '/src/hash.js', `export default '${citiesLink}';`)
-    
+
     console.log(`📤 Publishing the new hash...`)
     await simpleGit(nileClientDir)
       .add('./*')
